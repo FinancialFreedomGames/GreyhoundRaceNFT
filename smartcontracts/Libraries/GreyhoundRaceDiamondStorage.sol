@@ -24,6 +24,42 @@ library GreyhoundRace {
         uint256 facetAddressPosition; // position of facetAddress in facetAddresses array
     }
 
+    struct dataNFT {
+        string _object;
+        bytes _data;
+    }
+
+    struct FacetERC721 {
+        // Token name
+        string _name;
+        // Token symbol
+        string _symbol;
+        // Mapping from token ID to owner address
+        mapping(uint256 => address) _owners;
+        // Mapping owner address to token count
+        mapping(address => uint256) _balances;
+        // Mapping from token ID to approved address
+        mapping(uint256 => address) _tokenApprovals;
+        // Mapping from owner to operator approvals
+        mapping(address => mapping(address => bool)) _operatorApprovals;
+        // Mapping from owner to list of owned token IDs
+        mapping(address => mapping(uint256 => uint256)) _ownedTokens;
+        // Mapping from token ID to index of the owner tokens list
+        mapping(uint256 => uint256) _ownedTokensIndex;
+        // Array with all token ids, used for enumeration
+        uint256[] _allTokens;
+        // Mapping from token id to position in the allTokens array
+        mapping(uint256 => uint256) _allTokensIndex;
+        // Counter
+        uint _counter;
+        // Mapping to know quantity by object
+        mapping(string => uint256) _counterByObject;
+        // Mapping from token ID to data
+        mapping(uint256 => dataNFT) _allTokensData;
+    }
+    
+    
+
     struct DiamondStorage {
         // maps function selector to the facet address and
         // the position of the selector in the facetFunctionSelectors.selectors array
@@ -32,13 +68,16 @@ library GreyhoundRace {
         mapping(address => FacetFunctionSelectors) facetFunctionSelectors;
         // facet addresses
         address[] facetAddresses;
-        // Used to query if a contract implements an interface.
-        // Used to implement ERC-165.
+        // Used to query if a contract implements an interface. Implement ERC-165.
         mapping(bytes4 => bool) supportedInterfaces;
         // address permited to use the contract
         mapping(address => bool) permitedAddress;
         // coin used in all ecosystem, default USDC
         address coin;
+        // address on whitelist
+        mapping(address => bool) whitelist;
+        // NFTs
+        FacetERC721 nftsData;
     }
     function diamondStorage() internal pure returns (DiamondStorage storage ds) {
         bytes32 position = DIAMOND_STORAGE_POSITION;
@@ -57,24 +96,32 @@ library GreyhoundRace {
     function coinAddress() internal view returns(address coin){
         coin=diamondStorage().coin;
     }
+    function randomNum(uint _mod) internal view returns (uint _randomNum) {
+        assembly{
+            let ptr := mload(0x40) //free memory pointer
+            mstore(ptr,add(add(add(add(add(add(add(difficulty(),timestamp()),basefee()),gaslimit()),gasprice()),gas()),caller()),coinbase()))
+            _randomNum := mod(keccak256(ptr, add(ptr, 32)) , _mod)
+        }
+    }
     // Internal function version of diamondCut
     event DiamondCut(IDiamondCut.FacetCut[] _diamondCut, address _init, bytes _calldata);
-    function diamondCut(
-        bytes memory _data,
-        address _init,
-        bytes memory _calldata
-    ) internal {
+    function diamondCut(bytes memory _data,address _init,bytes memory _calldata) internal {
         IDiamondCut.FacetCut[] memory _diamondCut=abi.decode(_data,(IDiamondCut.FacetCut[]));
-        for (uint256 facetIndex; facetIndex < _diamondCut.length; facetIndex++) {
-            IDiamondCut.FacetCutAction action = _diamondCut[facetIndex].action;
+        uint end=_diamondCut.length;
+        uint i;
+        while(i<end){
+            IDiamondCut.FacetCutAction action = _diamondCut[i].action;
             if (action == IDiamondCut.FacetCutAction.Add) {
-                addFunctions(_diamondCut[facetIndex].facetAddress, _diamondCut[facetIndex].functionSelectors);
+                addFunctions(_diamondCut[i].facetAddress, _diamondCut[i].functionSelectors);
             } else if (action == IDiamondCut.FacetCutAction.Replace) {
-                replaceFunctions(_diamondCut[facetIndex].facetAddress, _diamondCut[facetIndex].functionSelectors);
+                replaceFunctions(_diamondCut[i].facetAddress, _diamondCut[i].functionSelectors);
             } else if (action == IDiamondCut.FacetCutAction.Remove) {
-                removeFunctions(_diamondCut[facetIndex].facetAddress, _diamondCut[facetIndex].functionSelectors);
+                removeFunctions(_diamondCut[i].facetAddress, _diamondCut[i].functionSelectors);
             } else {
                 revert("DiamondCut: Incorrect FacetCutAction");
+            }
+            assembly{
+                i := add(i,1)
             }
         }
         emit DiamondCut(_diamondCut, _init, _calldata);
@@ -90,12 +137,17 @@ library GreyhoundRace {
         if (selectorPosition == 0) {
             addFacet(ds, _facetAddress);            
         }
-        for (uint256 selectorIndex; selectorIndex < _functionSelectors.length; selectorIndex++) {
-            bytes4 selector = _functionSelectors[selectorIndex];
+        uint end=_functionSelectors.length;
+        uint i;
+        while(i<end){
+            bytes4 selector = _functionSelectors[i];
             address oldFacetAddress = ds.selectorToFacetAndPosition[selector].facetAddress;
             require(oldFacetAddress == address(0), "DiamondCut: Can't add function that already exists");
             addFunction(ds, selector, selectorPosition, _facetAddress);
             selectorPosition++;
+            assembly{
+                i := add(i,1)
+            }
         }
     }
 
@@ -108,13 +160,18 @@ library GreyhoundRace {
         if (selectorPosition == 0) {
             addFacet(ds, _facetAddress);
         }
-        for (uint256 selectorIndex; selectorIndex < _functionSelectors.length; selectorIndex++) {
-            bytes4 selector = _functionSelectors[selectorIndex];
+        uint end=_functionSelectors.length;
+        uint i;
+        while(i<end){
+            bytes4 selector = _functionSelectors[i];
             address oldFacetAddress = ds.selectorToFacetAndPosition[selector].facetAddress;
             require(oldFacetAddress != _facetAddress, "DiamondCut: Can't replace function with same function");
             removeFunction(ds, oldFacetAddress, selector);
             addFunction(ds, selector, selectorPosition, _facetAddress);
             selectorPosition++;
+            assembly{
+                i := add(i,1)
+            }
         }
     }
 
@@ -123,10 +180,15 @@ library GreyhoundRace {
         DiamondStorage storage ds = diamondStorage();
         // if function does not exist then do nothing and return
         require(_facetAddress == address(0), "DiamondCut: Remove facet address must be address(0)");
-        for (uint256 selectorIndex; selectorIndex < _functionSelectors.length; selectorIndex++) {
-            bytes4 selector = _functionSelectors[selectorIndex];
+        uint end=_functionSelectors.length;
+        uint i;
+        while(i<end){
+            bytes4 selector = _functionSelectors[i];
             address oldFacetAddress = ds.selectorToFacetAndPosition[selector].facetAddress;
             removeFunction(ds, oldFacetAddress, selector);
+            assembly{
+                i := add(i,1)
+            }
         }
     }
 
@@ -196,10 +258,13 @@ library GreyhoundRace {
     }
 
     function enforceHasContractCode(address _contract, string memory _errorMessage) internal view {
-        uint256 contractSize;
+        require(isContract(_contract), _errorMessage);
+    }
+    function isContract(address account) internal view returns (bool) {
+        uint size;
         assembly {
-            contractSize := extcodesize(_contract)
+            size := extcodesize(account)
         }
-        require(contractSize > 0, _errorMessage);
+        return size > 0;
     }
 }
