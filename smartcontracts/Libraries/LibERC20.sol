@@ -26,9 +26,15 @@ library LibERC20 {
         require(success, 'TransferHelper: ETH_TRANSFER_FAILED');
     }
 
-    function balanceOf(address token,address account) internal view returns (uint256) {
+    function safeBalanceOf(address token,address account) internal view returns (uint256) {
         (bool success, bytes memory data)=token.staticcall(abi.encodeWithSelector(0x70a08231, account));
         require(success && data.length >= 32, 'LibIERC20: BALANCE_OF_FAILED');
+        return abi.decode(data, (uint256));
+    }
+
+    function safeDecimals(address token) internal view returns (uint256) {
+        (bool success, bytes memory data)=token.staticcall(abi.encodeWithSelector(0x313ce567));
+        require(success && data.length >= 32, 'LibIERC20: DECIMAL_OF_FAILED');
         return abi.decode(data, (uint256));
     }
 }

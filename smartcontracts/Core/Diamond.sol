@@ -27,23 +27,25 @@ contract Diamond {
     function generateCut(address _facet,IDiamondCut.FacetCutAction _mode) private pure returns(bytes memory bCut){
         IDiamondCut.FacetCut[] memory cut = new IDiamondCut.FacetCut[](1);
         cut[0]=IDiamondCut.FacetCut({
-            facetAddress: _facet, 
+            facetAddress: _mode==IDiamondCut.FacetCutAction.Remove?address(0):_facet, 
             action: _mode, 
             functionSelectors: IFacet(_facet).getSelectors()
         });
         bCut=abi.encode(cut);
     }
     // Easy add facet
-    function addFacet(address _facet) external {
+    function addFacet(address _facet) external returns(bool success){
         GreyhoundRace.whenPermited();
         bytes memory _cut=generateCut(_facet,IDiamondCut.FacetCutAction.Add);
         GreyhoundRace.diamondCut(_cut,address(0),"");
+        (success,)=_facet.delegatecall(abi.encodeWithSelector(IFacet.initialize.selector));
     }
     // Easy update facet
-    function updateFacet(address _facet) external {
+    function updateFacet(address _facet) external returns(bool success){
         GreyhoundRace.whenPermited();
         bytes memory _cut=generateCut(_facet,IDiamondCut.FacetCutAction.Replace);
         GreyhoundRace.diamondCut(_cut,address(0),"");
+        (success,)=_facet.delegatecall(abi.encodeWithSelector(IFacet.initialize.selector));
     }
     // Easy remove facet
     function removeFacet(address _facet) external {
