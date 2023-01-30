@@ -33,25 +33,49 @@ contract Diamond {
         });
         bCut=abi.encode(cut);
     }
-    // Easy add facet
-    function addFacet(address _facet) external returns(bool success){
+    // Easy add facets
+    function addFacets(address[] calldata _facets) external returns(bool success){
         GreyhoundRace.whenPermited();
-        bytes memory _cut=generateCut(_facet,IDiamondCut.FacetCutAction.Add);
-        GreyhoundRace.diamondCut(_cut,address(0),"");
-        (success,)=_facet.delegatecall(abi.encodeWithSelector(IFacet.initialize.selector));
+        uint i;
+        uint end=_facets.length;
+        while (i<end){
+            address _facet=_facets[i];
+            bytes memory _cut=generateCut(_facet,IDiamondCut.FacetCutAction.Add);
+            GreyhoundRace.diamondCut(_cut,address(0),"");
+            (success,)=_facet.delegatecall(abi.encodeWithSelector(IFacet.initialize.selector));
+            assembly{
+                i:=add(i,1)
+            }
+        }
     }
-    // Easy update facet
-    function updateFacet(address _facet) external returns(bool success){
+    // Easy update facets
+    function updateFacets(address[] calldata _facets) external returns(bool success){
         GreyhoundRace.whenPermited();
-        bytes memory _cut=generateCut(_facet,IDiamondCut.FacetCutAction.Replace);
-        GreyhoundRace.diamondCut(_cut,address(0),"");
-        (success,)=_facet.delegatecall(abi.encodeWithSelector(IFacet.initialize.selector));
+        uint i;
+        uint end=_facets.length;
+        while (i<end){
+            address _facet=_facets[i];
+            bytes memory _cut=generateCut(_facet,IDiamondCut.FacetCutAction.Replace);
+            GreyhoundRace.diamondCut(_cut,address(0),"");
+            (success,)=_facet.delegatecall(abi.encodeWithSelector(IFacet.initialize.selector));
+            assembly{
+                i:=add(i,1)
+            }
+        }
     }
-    // Easy remove facet
-    function removeFacet(address _facet) external {
+    // Easy remove facets
+    function removeFacets(address[] calldata _facets) external {
         GreyhoundRace.whenPermited();
-        bytes memory _cut=generateCut(_facet,IDiamondCut.FacetCutAction.Remove);
-        GreyhoundRace.diamondCut(_cut,address(0),"");
+        uint i;
+        uint end=_facets.length;
+        while (i<end){
+            address _facet=_facets[i];
+            bytes memory _cut=generateCut(_facet,IDiamondCut.FacetCutAction.Remove);
+            GreyhoundRace.diamondCut(_cut,address(0),"");
+            assembly{
+                i:=add(i,1)
+            }
+        }
     }
     // Initialize facet if need to write data on diamondStorage
     function initializeFacet(address _facet) external {
@@ -71,6 +95,7 @@ contract Diamond {
         // get facet from function selector
         address facet = ds.selectorToFacetAndPosition[msg.sig].facetAddress;
         require(facet != address(0), "Diamond: Function does not exist");
+        require(ds.blacklist[msg.sender] == false, "Diamond: Blacklisted");
         // Execute external function from facet using delegatecall and return any value.
         assembly {
             // copy function selector and any arguments
