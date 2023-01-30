@@ -10,7 +10,6 @@ interface IDiamondCut {
     function diamondCut(FacetCut[] calldata _diamondCut,address _init,bytes calldata _calldata) external;
     event DiamondCut(FacetCut[] _diamondCut, address _init, bytes _calldata);
 }
-
 library GreyhoundRace {
     bytes32 constant DIAMOND_STORAGE_POSITION = keccak256("greyhoundrace.diamond.storage");
 
@@ -23,7 +22,6 @@ library GreyhoundRace {
         bytes4[] functionSelectors;
         uint256 facetAddressPosition; // position of facetAddress in facetAddresses array
     }
-
     struct dataNFT {
         string _object;
         bytes _data;
@@ -57,9 +55,65 @@ library GreyhoundRace {
         // Mapping from token ID to data
         mapping(uint256 => dataNFT) _allTokensData;
     }
-    
-    
 
+    struct Node {
+        uint parent;
+        uint left;
+        uint right;
+        bool red;
+    }
+
+    struct Tree {
+        uint root;
+        mapping(uint => Node) nodes;
+    }
+
+    struct Reward{
+        address token;
+        uint amount;
+        uint amount_locked;
+        uint timeout;
+    }
+
+    struct Record{
+        uint32 centimeters;
+        uint32 milliseconds;
+        bool collision;
+    }
+
+    struct GreyhoundRecord{
+        address user;
+        uint tokenID;
+        uint register_time;
+        uint end_race_time;
+        bytes records;//Record[] to bytes encode, decode bytes to Record[]
+    }
+
+    struct Race{
+        uint weather;
+        bool isFenced;
+        uint centimeters;
+        uint start;
+        uint end;
+        uint registration_price;
+        uint prizepool;
+        uint minSumStats;
+        uint maxSumStats;
+        uint max_participants;
+        uint num_participants;
+    }
+    struct RaceFacet{
+        // Red Black Tree for Race clasification
+        mapping (uint => Tree) clasification;
+        uint lastRace;
+        mapping(uint => Race) races;
+        mapping(uint => mapping(uint=>GreyhoundRecord)) race_participant;
+        mapping(uint => mapping(uint => uint)) race_time_token;
+        mapping(uint => mapping(uint => uint)) token_race_record;
+        mapping(address => mapping(uint => bool)) user_in_race;
+        mapping (string => uint) open_races;
+        mapping (uint => string) race_open;
+    }
     struct DiamondStorage {
         // maps function selector to the facet address and
         // the position of the selector in the facetFunctionSelectors.selectors array
@@ -72,12 +126,20 @@ library GreyhoundRace {
         mapping(bytes4 => bool) supportedInterfaces;
         // address permited to use the contract
         mapping(address => bool) permitedAddress;
+        // institutional address
+        mapping(string => address) institutionalAddress;
         // coin used in all ecosystem, default USDC
         address coin;
         // address on whitelist
         mapping(address => bool) whitelist;
+        // address on blacklist
+        mapping(address => bool) blacklist;
         // NFTs
         FacetERC721 nftsData;
+        // Rewards to claim from races
+        mapping (address => Reward[]) rewards;
+        // Race Data
+        RaceFacet raceData;
     }
     function diamondStorage() internal pure returns (DiamondStorage storage ds) {
         bytes32 position = DIAMOND_STORAGE_POSITION;
@@ -93,13 +155,11 @@ library GreyhoundRace {
     function whenPermited() internal view {
         require(diamondStorage().permitedAddress[msg.sender],"Diamond: Address not permited");
     }
-    function coinAddress() internal view returns(address coin){
-        coin=diamondStorage().coin;
-    }
+    
     function randomNum(uint _mod) internal view returns (uint _randomNum) {
         assembly{
             let ptr := mload(0x40) //free memory pointer
-            mstore(ptr,add(add(add(add(add(add(add(difficulty(),timestamp()),basefee()),gaslimit()),gasprice()),gas()),caller()),coinbase()))
+            mstore(ptr,add(add(add(add(add(add(difficulty(),timestamp()),gaslimit()),gasprice()),gas()),caller()),coinbase()))
             _randomNum := mod(keccak256(ptr, add(ptr, 32)) , _mod)
         }
     }
